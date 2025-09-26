@@ -29,7 +29,7 @@ def clean_messages_for_new_image(messages):
 
 import pyautogui
 
-def scan_icons(icons_folder="icons", confidence=0.7):
+def scan_icons(icons_folder="worker\icons", confidence=0.7):
     """Scan the screen for known icons and return dict of {icon_name: (x, y)}"""
     present_icons = {}
     for folder in os.listdir(icons_folder):
@@ -67,7 +67,7 @@ def get_element_and_first_guess(client, goal, messages):
     base64_image = encode_image("shot_one.png")
 
     # Scan for icons
-    icons_found = scan_icons("icons")
+    icons_found = scan_icons("worker\icons")
     print(f"Icons found: {list(icons_found.keys())}")
 
     # Run OCR (EasyOCR)
@@ -114,7 +114,7 @@ def get_element_and_first_guess(client, goal, messages):
         "content": response.choices[0].message.content
     })
 
-    return response.choices[0].message.content.strip(), icons_found
+    return response.choices[0].message.content.strip(), icons_found, text_elements
 
 def parse_element_from_reply(reply):
     """Extract action and element name/description"""
@@ -130,7 +130,7 @@ def parse_element_from_reply(reply):
         return None, "unknown element"
 
 def click_target(goal, messages):
-    reply, icons_found = get_element_and_first_guess(client, goal, messages)
+    reply, icons_found, text_elements = get_element_and_first_guess(client, goal, messages)
     print("GPT combined response:", reply)
     action, element = parse_element_from_reply(reply)
 
@@ -140,6 +140,17 @@ def click_target(goal, messages):
         if icon_name.lower() in element.lower():
             target_coords = coords
             break
+     # Match GPT's element to detected text fields
+    if not target_coords:
+        for t in text_elements:
+            if t["text"].lower() in element.lower():
+                # bbox order from EasyOCR: [top-left, top-right, bottom-right, bottom-left]
+                top_right = t["bbox"][1]
+                bottom_left = t["bbox"][3]
+                center_x = int((top_right[0] + bottom_left[0]) / 2)
+                center_y = int((top_right[1] + bottom_left[1]) / 2)
+                target_coords = (center_x, center_y)
+                break
 
     if not target_coords:
         print(f"Element '{element}' not found among detected icons: {list(icons_found.keys())}")
